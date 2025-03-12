@@ -1,33 +1,41 @@
 from fastapi import APIRouter, UploadFile, File
-from paddleocr import PaddleOCR
-import numpy as np
+import requests
 from PIL import Image
-import cv2
-
-# ✅ Initialisation PaddleOCR pour le français
-ocr_fr = PaddleOCR(use_angle_cls=True, lang='fr')
+import io
 
 # ✅ Initialisation du routeur pour l'API française
 router = APIRouter()
 
-# ✅ Fonction de prétraitement des images
-def preprocess_image(img_bytes):
-    nparr = np.frombuffer(img_bytes, np.uint8)
-    img_cv = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+# ✅ Clé API OCR.space
+OCR_API_KEY = "K81378610988957"
 
-    # 1. Convertir en niveaux de gris
-    gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
+# ✅ URL de base de l'API OCR.space
+OCR_API_URL = "https://api.ocr.space/parse/image"
 
-    # 2. Augmenter le contraste
-    contrasted = cv2.convertScaleAbs(gray, alpha=1.5, beta=0)
 
-    # 3. Appliquer un seuil adaptatif (binarisation)
-    adaptive_threshold = cv2.adaptiveThreshold(
-        contrasted, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY, 11, 2
-    )
+# ✅ Fonction de compression d'image
+def compress_image(img_bytes, max_size=1024 * 1024):  # 1 Mo en octets
+    img = Image.open(io.BytesIO(img_bytes))
+    img_format = img.format or "JPEG"  # Utiliser JPEG par défaut si le format n'est pas détecté
 
-    return adaptive_threshold
+    # Réduire la qualité initialement à 75%
+    output = io.BytesIO()
+    img.save(output, format=img_format, quality=75, optimize=True)
+    compressed_bytes = output.getvalue()
+
+    # Si l'image dépasse encore 1 Mo, réduire la résolution
+    while len(compressed_bytes) > max_size:
+        # Réduire la taille de l'image (par exemple, diviser les dimensions par 1.5)
+        new_width = int(img.width / 1.5)
+        new_height = int(img.height / 1.5)
+        img_resized = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        output = io.BytesIO()
+        img_resized.save(output, format=img_format, quality=75, optimize=True)
+        compressed_bytes = output.getvalue()
+        img = img_resized  # Mettre à jour l'image pour la prochaine itération si nécessaire
+
+    return compressed_bytes
+
 
 # ✅ Route OCR en français
 @router.post("/")
@@ -35,18 +43,32 @@ async def convert_image_to_text_fr(file: UploadFile = File(...)):
     try:
         # Lire l'image envoyée par l'utilisateur
         img_bytes = await file.read()
-        processed_img = preprocess_image(img_bytes)
 
-        # Convertir en format PIL pour PaddleOCR
-        img_pil = Image.fromarray(processed_img)
+        # Compresser l'image pour respecter la limite de 1 Mo
+        compressed_img_bytes = compress_image(img_bytes)
 
-        # PaddleOCR pour le français
-        results = ocr_fr.ocr(np.array(img_pil), cls=True)
-        extracted_text = " ".join([line[1][0] for line in results[0]])
-
-        return {
-            "extracted_text": extracted_text.strip()
+        # Préparer les données pour la requête
+        files = {"file": (file.filename, compressed_img_bytes, file.content_type)}
+        params = {
+            "apikey": OCR_API_KEY,
+            "language": "fre",  # Langue française
+            "isOverlayRequired": "false",
+            "scale": "true",
+            "OCREngine": "2"  # Utiliser le moteur OCR 2 pour une meilleure précision
         }
+
+        # Envoyer la requête à OCR.space
+        response = requests.post(OCR_API_URL, files=files, data=params)
+        response.raise_for_status()  # Vérifier si la requête a réussi
+
+        # Parser la réponse JSON
+        result = response.json()
+        if result.get("IsErroredOnProcessing", True):
+            return {"error": result.get("ErrorMessage", "Erreur inconnue")}
+
+        # Extraire le texte
+        extracted_text = result["ParsedResults"][0]["ParsedText"].strip()
+        return {"extracted_text": extracted_text}
 
     except Exception as e:
         return {"error": str(e)}
