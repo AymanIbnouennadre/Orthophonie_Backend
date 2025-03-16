@@ -4,6 +4,8 @@ from app.APIs.image_to_textFR import router as fr_router
 from app.APIs.image_to_textAR import router as ar_router
 from app.APIs.text_to_speechFR import router as tts_fr_router
 from app.APIs.text_to_speechAR import router as tts_ar_router
+from  app.APIs.speech_to_textAR import router as stt_ar_router
+from app.APIs.speech_to_textFR import router as stt_fr_router
 
 # ✅ Initialisation de FastAPI
 app = FastAPI()
@@ -24,6 +26,10 @@ app.include_router(ar_router, prefix="/convert-image-to-textAR", tags=["OCR Arab
 # ✅ Inclure les routeurs des APIs TTS
 app.include_router(tts_fr_router, prefix="/convert-text-to-speechFR", tags=["TTS French"])
 app.include_router(tts_ar_router, prefix="/convert-text-to-speechAR", tags=["TTS Arabic"])
+
+# ✅ Inclure les routeurs des APIs TTS
+app.include_router(stt_ar_router, prefix="/convert-speech-to-textAR", tags=["STT Arabic"])
+app.include_router(stt_fr_router, prefix="/convert-speech-to-textFR", tags=["STT French"])
 
 # Lancer l'application FastAPI (le fichier principal)
 if __name__ == "__main__":
