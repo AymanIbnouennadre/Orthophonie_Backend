@@ -17,7 +17,8 @@ def transcribe_audio(audio_file: BytesIO):
         f.write(audio_file.read())
 
     subprocess.run(
-        ["ffmpeg", "-i", temp_input, "-ar", "16000", "-ac", "1", audio_path, "-y", "-loglevel", "quiet"],
+        ["ffmpeg", "-i", temp_input, "-ar", "16000", "-ac", "1", "-threads", "4", audio_path, "-y", "-loglevel",
+         "quiet"],
         check=True
     )
 
