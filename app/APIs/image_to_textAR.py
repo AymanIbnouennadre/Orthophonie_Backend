@@ -1,65 +1,62 @@
-from fastapi import APIRouter, UploadFile, File
 import requests
+from fastapi import APIRouter, UploadFile, File
 from PIL import Image
 import io
 
-# ✅ Initialisation du routeur pour l'API arabe
 router = APIRouter()
 
-# ✅ Clé API OCR.space
+# Clé API OCR.space
 OCR_API_KEY = "K81378610988957"
 
-# ✅ URL de base de l'API OCR.space
+# URL de l'API OCR.space
 OCR_API_URL = "https://api.ocr.space/parse/image"
 
-
-# ✅ Fonction de compression d'image
+# Fonction de compression d'image
 def compress_image(img_bytes, max_size=1024 * 1024):  # 1 Mo en octets
     img = Image.open(io.BytesIO(img_bytes))
-    img_format = img.format or "JPEG"  # Utiliser JPEG par défaut si le format n'est pas détecté
+    img_format = img.format or "JPEG"
 
-    # Réduire la qualité initialement à 75%
     output = io.BytesIO()
     img.save(output, format=img_format, quality=75, optimize=True)
     compressed_bytes = output.getvalue()
 
-    # Si l'image dépasse encore 1 Mo, réduire la résolution
     while len(compressed_bytes) > max_size:
-        # Réduire la taille de l'image (par exemple, diviser les dimensions par 1.5)
         new_width = int(img.width / 1.5)
         new_height = int(img.height / 1.5)
         img_resized = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
         output = io.BytesIO()
         img_resized.save(output, format=img_format, quality=75, optimize=True)
         compressed_bytes = output.getvalue()
-        img = img_resized  # Mettre à jour l'image pour la prochaine itération si nécessaire
+        img = img_resized
 
     return compressed_bytes
 
 
-# ✅ Route OCR en arabe
+# Route OCR
 @router.post("/")
 async def convert_image_to_text_ar(file: UploadFile = File(...)):
     try:
         # Lire l'image envoyée par l'utilisateur
         img_bytes = await file.read()
 
-        # Compresser l'image pour respecter la limite de 1 Mo
+        # Compresser l'image
         compressed_img_bytes = compress_image(img_bytes)
 
         # Préparer les données pour la requête
         files = {"file": (file.filename, compressed_img_bytes, file.content_type)}
+        headers = {
+            "apikey": OCR_API_KEY,  # Clé API envoyée dans l'en-tête
+        }
         params = {
-            "apikey": OCR_API_KEY,
             "language": "ara",  # Langue arabe
             "isOverlayRequired": "false",
             "scale": "true",
-            "OCREngine": "1"  # Utiliser le moteur OCR 2 pour une meilleure précision
+            "OCREngine": "1"  # Utiliser le moteur OCR 1
         }
 
         # Envoyer la requête à OCR.space
-        response = requests.post(OCR_API_URL, files=files, data=params)
-        response.raise_for_status()  # Vérifier si la requête a réussi
+        response = requests.post(OCR_API_URL, files=files, data=params, headers=headers)
+        response.raise_for_status()
 
         # Parser la réponse JSON
         result = response.json()

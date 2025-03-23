@@ -12,7 +12,6 @@ OCR_API_KEY = "K81378610988957"
 # ✅ URL de base de l'API OCR.space
 OCR_API_URL = "https://api.ocr.space/parse/image"
 
-
 # ✅ Fonction de compression d'image
 def compress_image(img_bytes, max_size=1024 * 1024):  # 1 Mo en octets
     img = Image.open(io.BytesIO(img_bytes))
@@ -36,7 +35,6 @@ def compress_image(img_bytes, max_size=1024 * 1024):  # 1 Mo en octets
 
     return compressed_bytes
 
-
 # ✅ Route OCR en français
 @router.post("/")
 async def convert_image_to_text_fr(file: UploadFile = File(...)):
@@ -49,8 +47,10 @@ async def convert_image_to_text_fr(file: UploadFile = File(...)):
 
         # Préparer les données pour la requête
         files = {"file": (file.filename, compressed_img_bytes, file.content_type)}
+        headers = {
+            "apikey": OCR_API_KEY,  # Clé API envoyée dans l'en-tête
+        }
         params = {
-            "apikey": OCR_API_KEY,
             "language": "fre",  # Langue française
             "isOverlayRequired": "false",
             "scale": "true",
@@ -58,7 +58,7 @@ async def convert_image_to_text_fr(file: UploadFile = File(...)):
         }
 
         # Envoyer la requête à OCR.space
-        response = requests.post(OCR_API_URL, files=files, data=params)
+        response = requests.post(OCR_API_URL, files=files, data=params, headers=headers)
         response.raise_for_status()  # Vérifier si la requête a réussi
 
         # Parser la réponse JSON
